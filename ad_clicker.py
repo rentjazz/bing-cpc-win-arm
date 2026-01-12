@@ -28,6 +28,53 @@ if config.behavior.telegram_enabled:
 
 __author__ = "Coşkun Deniz <coskun.denize@gmail.com>"
 
+PREFERRED_DOMAINS = (
+    "safehdf.com",
+    "coffrefort.safehdf.com",
+    "coffre-fort.safehdf.com",
+)
+
+
+def _normalize_domain_text(text: str) -> str:
+    normalized = text.lower()
+    for marker in ("‐", "‑", "‒", "–", "—", "−"):
+        normalized = normalized.replace(marker, "-")
+    return normalized
+
+
+def _select_preferred_links(
+    ads: list[tuple],
+    non_ad_links: list,
+    shopping_ads: list[tuple],
+) -> tuple[list[tuple], list, list[tuple]]:
+    for domain in PREFERRED_DOMAINS:
+        domain_lower = domain.lower()
+        for ad in ads:
+            link_url = ad[1] or ""
+            canon_link = ad[3] or ""
+            candidate = _normalize_domain_text(f"{link_url} {canon_link}")
+            if domain_lower in candidate:
+                return ([ad], [], [])
+        for link in non_ad_links:
+            link_url = link.get_attribute("href") or ""
+            candidate = _normalize_domain_text(f"{link_url} {link.text}")
+            if domain_lower in candidate:
+                return ([], [link], [])
+        for ad in shopping_ads:
+            link_url = ad[1] or ""
+            canon_link = ad[3] or ""
+            candidate = _normalize_domain_text(f"{link_url} {canon_link}")
+            if domain_lower in candidate:
+                return ([], [], [ad])
+
+    if ads:
+        return ([ads[0]], [], [])
+    if non_ad_links:
+        return ([], [non_ad_links[0]], [])
+    if shopping_ads:
+        return ([], [], [shopping_ads[0]])
+    return ([], [], [])
+
 
 def get_arg_parser() -> ArgumentParser:
     """Get argument parser
@@ -178,15 +225,9 @@ def main():
             if config.behavior.telegram_enabled:
                 notify_matching_ads(query, links=None, stats=search_controller.stats)
         else:
-            if ads:
-                ads = [ads[0]]
-                non_ad_links = []
-                shopping_ads = []
-            elif non_ad_links:
-                non_ad_links = [non_ad_links[0]]
-                shopping_ads = []
-            elif shopping_ads:
-                shopping_ads = [shopping_ads[0]]
+            ads, non_ad_links, shopping_ads = _select_preferred_links(
+                ads, non_ad_links, shopping_ads
+            )
 
             logger.debug(f"Selected click order: {config.behavior.click_order}")
 
