@@ -45,7 +45,11 @@ class SearchController:
     :param country_code: Country code for the proxy IP
     """
 
-    ALLOWED_CLICK_DOMAINS = ("safehdf.com", "coffrefort.safehdf.com")
+    ALLOWED_CLICK_DOMAINS = (
+        "safehdf.com",
+        "coffrefort.safehdf.com",
+        "coffre-fort.safehdf.com",
+    )
     URL = "https://www.bing.com"
 
     SEARCH_INPUT = (By.NAME, "q")
