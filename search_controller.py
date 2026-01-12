@@ -72,6 +72,7 @@ class SearchController:
     SHOPPING_AD_CANON_LINK_1 = (By.CSS_SELECTOR, "div.pa_url")
     SHOPPING_AD_CANON_LINK_2 = (By.CSS_SELECTOR, "div.b_attribution")
     RECAPTCHA = (By.ID, "recaptcha")
+    NEXT_PAGE = (By.ID, "b_next")
 
     def __init__(
         self, driver: selenium.webdriver, query: str, country_code: Optional[str] = None
@@ -168,6 +169,17 @@ class SearchController:
 
                 ad_links = self._get_ad_links()
                 non_ad_links = self._get_non_ad_links(non_ad_domains)
+
+                if not (ad_links or non_ad_links or shopping_ad_links):
+                    if self._go_to_next_results_page():
+                        self._make_random_scrolls()
+                        self._make_random_mouse_movements()
+
+                        if config.behavior.check_shopping_ads:
+                            shopping_ad_links = self._get_shopping_ad_links()
+
+                        ad_links = self._get_ad_links()
+                        non_ad_links = self._get_non_ad_links(non_ad_domains)
 
         except TimeoutException:
             logger.error("Timed out waiting for results!")
@@ -878,6 +890,27 @@ class SearchController:
 
         except NoSuchElementException:
             logger.debug("No cookie dialog found! Continue with search...")
+
+    def _go_to_next_results_page(self) -> bool:
+        """Go to the next results page if possible."""
+
+        try:
+            next_button = self._driver.find_element(*self.NEXT_PAGE)
+        except NoSuchElementException:
+            logger.info("Next page button not found. Staying on first page.")
+            return False
+
+        logger.info("No matching results found. Moving to next page...")
+        next_button.click()
+
+        try:
+            wait = WebDriverWait(self._driver, timeout=5)
+            wait.until(EC.presence_of_element_located(self.RESULTS_CONTAINER))
+        except TimeoutException:
+            logger.error("Timed out waiting for next page results!")
+            return False
+
+        return True
 
     def _is_scroll_at_the_end(self) -> bool:
         """Check if scroll is at the end
