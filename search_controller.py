@@ -17,6 +17,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
     StaleElementReferenceException,
+    ElementClickInterceptedException,
 )
 
 import hooks
@@ -935,7 +936,12 @@ class SearchController:
             return False
 
         logger.info("No matching results found. Moving to next page...")
-        next_button.click()
+        self._driver.execute_script("arguments[0].scrollIntoView(true);", next_button)
+        sleep(get_random_sleep(0.5, 1) * config.behavior.wait_factor)
+        try:
+            next_button.click()
+        except ElementClickInterceptedException:
+            self._driver.execute_script("arguments[0].click();", next_button)
 
         try:
             wait = WebDriverWait(self._driver, timeout=5)
