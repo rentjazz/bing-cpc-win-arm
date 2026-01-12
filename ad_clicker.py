@@ -178,6 +178,16 @@ def main():
             if config.behavior.telegram_enabled:
                 notify_matching_ads(query, links=None, stats=search_controller.stats)
         else:
+            if ads:
+                ads = [ads[0]]
+                non_ad_links = []
+                shopping_ads = []
+            elif non_ad_links:
+                non_ad_links = [non_ad_links[0]]
+                shopping_ads = []
+            elif shopping_ads:
+                shopping_ads = [shopping_ads[0]]
+
             logger.debug(f"Selected click order: {config.behavior.click_order}")
 
             if config.behavior.click_order == 1:

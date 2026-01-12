@@ -67,6 +67,8 @@ class SearchController:
     NON_AD_LINK_ELEMENT = (By.CSS_SELECTOR, "div.b_title h2 a")
     NON_AD_LINK_ELEMENT_2 = (By.CSS_SELECTOR, "div.b_algoheader a")
     NON_AD_LINK_ELEMENT_3 = (By.CSS_SELECTOR, "a.tilk")
+    NON_AD_CITE = (By.CSS_SELECTOR, "cite")
+    NON_AD_ATTRIBUTION = (By.CSS_SELECTOR, "div.b_attribution")
     SHOPPING_ADS_CONTAINER = (By.CSS_SELECTOR, "div.b_cards2")
     SHOPPING_ADS_CONTAINER_2 = (By.CSS_SELECTOR, "div.pa_item")
     SHOPPING_AD_ELEMENT_CONTAINER = (By.CSS_SELECTOR, "li.pa_item")
@@ -850,8 +852,9 @@ class SearchController:
                         continue
 
             link_url = link_element.get_attribute("href")
+            fallback_url = self._get_non_ad_display_url(link)
 
-            if not self._is_allowed_domain(link_url):
+            if not self._is_allowed_domain(link_url, fallback_url):
                 logger.debug(
                     "Skipping non-ad outside allowed domains: "
                     f"[{link_url}]"
@@ -875,6 +878,17 @@ class SearchController:
             non_ad_links = random.sample(non_ad_links, k=3)
 
         return non_ad_links
+
+    def _get_non_ad_display_url(self, link: LinkElement) -> str:
+        """Get displayed url text for a non-ad result."""
+
+        for selector in (self.NON_AD_CITE, self.NON_AD_ATTRIBUTION):
+            try:
+                return link.find_element(*selector).text.strip()
+            except NoSuchElementException:
+                continue
+
+        return ""
 
     def _is_allowed_domain(self, *urls: str) -> bool:
         for url in urls:
