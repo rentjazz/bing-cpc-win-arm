@@ -72,7 +72,13 @@ class SearchController:
     SHOPPING_AD_CANON_LINK_1 = (By.CSS_SELECTOR, "div.pa_url")
     SHOPPING_AD_CANON_LINK_2 = (By.CSS_SELECTOR, "div.b_attribution")
     RECAPTCHA = (By.ID, "recaptcha")
-    NEXT_PAGE = (By.ID, "b_next")
+    NEXT_PAGE_SELECTORS = (
+        (By.ID, "b_next"),
+        (By.CSS_SELECTOR, "a.sb_pagN"),
+        (By.CSS_SELECTOR, "a[title='Next page']"),
+        (By.CSS_SELECTOR, "a[aria-label='Next page']"),
+        (By.CSS_SELECTOR, "a[aria-label='Page suivante']"),
+    )
 
     def __init__(
         self, driver: selenium.webdriver, query: str, country_code: Optional[str] = None
@@ -894,9 +900,15 @@ class SearchController:
     def _go_to_next_results_page(self) -> bool:
         """Go to the next results page if possible."""
 
-        try:
-            next_button = self._driver.find_element(*self.NEXT_PAGE)
-        except NoSuchElementException:
+        next_button = None
+        for selector in self.NEXT_PAGE_SELECTORS:
+            try:
+                next_button = self._driver.find_element(*selector)
+                break
+            except NoSuchElementException:
+                continue
+
+        if not next_button:
             logger.info("Next page button not found. Staying on first page.")
             return False
 
