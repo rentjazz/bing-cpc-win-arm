@@ -852,7 +852,7 @@ class SearchController:
                         continue
 
             link_url = link_element.get_attribute("href")
-            fallback_url = self._get_non_ad_display_url(link)
+            fallback_url = self._get_non_ad_display_url(link) or link.text
 
             if not self._is_allowed_domain(link_url, fallback_url):
                 logger.debug(
@@ -892,7 +892,11 @@ class SearchController:
 
     def _is_allowed_domain(self, *urls: str) -> bool:
         for url in urls:
+            if not url:
+                continue
             url_lower = url.lower()
+            for marker in ("‐", "‑", "‒", "–", "—", "−"):
+                url_lower = url_lower.replace(marker, "-")
             if any(domain in url_lower for domain in self.ALLOWED_CLICK_DOMAINS):
                 return True
         return False
