@@ -17,6 +17,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
     StaleElementReferenceException,
+    ElementClickInterceptedException,
 )
 
 import hooks
@@ -45,7 +46,11 @@ class SearchController:
     :param country_code: Country code for the proxy IP
     """
 
-    ALLOWED_CLICK_DOMAINS = ("safehdf.com", "coffrefort.safehdf.com")
+    ALLOWED_CLICK_DOMAINS = (
+        "safehdf.com",
+        "coffrefort.safehdf.com",
+        "coffre-fort.safehdf.com",
+    )
     URL = "https://www.bing.com"
 
     SEARCH_INPUT = (By.NAME, "q")
@@ -63,6 +68,8 @@ class SearchController:
     NON_AD_LINK_ELEMENT = (By.CSS_SELECTOR, "div.b_title h2 a")
     NON_AD_LINK_ELEMENT_2 = (By.CSS_SELECTOR, "div.b_algoheader a")
     NON_AD_LINK_ELEMENT_3 = (By.CSS_SELECTOR, "a.tilk")
+    NON_AD_CITE = (By.CSS_SELECTOR, "cite")
+    NON_AD_ATTRIBUTION = (By.CSS_SELECTOR, "div.b_attribution")
     SHOPPING_ADS_CONTAINER = (By.CSS_SELECTOR, "div.b_cards2")
     SHOPPING_ADS_CONTAINER_2 = (By.CSS_SELECTOR, "div.pa_item")
     SHOPPING_AD_ELEMENT_CONTAINER = (By.CSS_SELECTOR, "li.pa_item")
@@ -72,6 +79,13 @@ class SearchController:
     SHOPPING_AD_CANON_LINK_1 = (By.CSS_SELECTOR, "div.pa_url")
     SHOPPING_AD_CANON_LINK_2 = (By.CSS_SELECTOR, "div.b_attribution")
     RECAPTCHA = (By.ID, "recaptcha")
+    NEXT_PAGE_SELECTORS = (
+        (By.ID, "b_next"),
+        (By.CSS_SELECTOR, "a.sb_pagN"),
+        (By.CSS_SELECTOR, "a[title='Next page']"),
+        (By.CSS_SELECTOR, "a[aria-label='Next page']"),
+        (By.CSS_SELECTOR, "a[aria-label='Page suivante']"),
+    )
 
     def __init__(
         self, driver: selenium.webdriver, query: str, country_code: Optional[str] = None
@@ -168,6 +182,17 @@ class SearchController:
 
                 ad_links = self._get_ad_links()
                 non_ad_links = self._get_non_ad_links(non_ad_domains)
+
+                if not (ad_links or non_ad_links or shopping_ad_links):
+                    if self._go_to_next_results_page():
+                        self._make_random_scrolls()
+                        self._make_random_mouse_movements()
+
+                        if config.behavior.check_shopping_ads:
+                            shopping_ad_links = self._get_shopping_ad_links()
+
+                        ad_links = self._get_ad_links()
+                        non_ad_links = self._get_non_ad_links(non_ad_domains)
 
         except TimeoutException:
             logger.error("Timed out waiting for results!")
@@ -828,8 +853,9 @@ class SearchController:
                         continue
 
             link_url = link_element.get_attribute("href")
+            fallback_url = self._get_non_ad_display_url(link) or link.text
 
-            if not self._is_allowed_domain(link_url):
+            if not self._is_allowed_domain(link_url, fallback_url):
                 logger.debug(
                     "Skipping non-ad outside allowed domains: "
                     f"[{link_url}]"
@@ -854,9 +880,24 @@ class SearchController:
 
         return non_ad_links
 
+    def _get_non_ad_display_url(self, link: LinkElement) -> str:
+        """Get displayed url text for a non-ad result."""
+
+        for selector in (self.NON_AD_CITE, self.NON_AD_ATTRIBUTION):
+            try:
+                return link.find_element(*selector).text.strip()
+            except NoSuchElementException:
+                continue
+
+        return ""
+
     def _is_allowed_domain(self, *urls: str) -> bool:
         for url in urls:
+            if not url:
+                continue
             url_lower = url.lower()
+            for marker in ("‐", "‑", "‒", "–", "—", "−"):
+                url_lower = url_lower.replace(marker, "-")
             if any(domain in url_lower for domain in self.ALLOWED_CLICK_DOMAINS):
                 return True
         return False
@@ -878,6 +919,38 @@ class SearchController:
 
         except NoSuchElementException:
             logger.debug("No cookie dialog found! Continue with search...")
+
+    def _go_to_next_results_page(self) -> bool:
+        """Go to the next results page if possible."""
+
+        next_button = None
+        for selector in self.NEXT_PAGE_SELECTORS:
+            try:
+                next_button = self._driver.find_element(*selector)
+                break
+            except NoSuchElementException:
+                continue
+
+        if not next_button:
+            logger.info("Next page button not found. Staying on first page.")
+            return False
+
+        logger.info("No matching results found. Moving to next page...")
+        self._driver.execute_script("arguments[0].scrollIntoView(true);", next_button)
+        sleep(get_random_sleep(0.5, 1) * config.behavior.wait_factor)
+        try:
+            next_button.click()
+        except ElementClickInterceptedException:
+            self._driver.execute_script("arguments[0].click();", next_button)
+
+        try:
+            wait = WebDriverWait(self._driver, timeout=5)
+            wait.until(EC.presence_of_element_located(self.RESULTS_CONTAINER))
+        except TimeoutException:
+            logger.error("Timed out waiting for next page results!")
+            return False
+
+        return True
 
     def _is_scroll_at_the_end(self) -> bool:
         """Check if scroll is at the end

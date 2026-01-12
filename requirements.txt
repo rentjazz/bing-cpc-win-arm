@@ -4,4 +4,5 @@ psutil==5.9.8
 PyAutoGUI==0.9.53
 python-telegram-bot==20.6
 selenium==4.16.0
+setuptools==70.0.0
 undetected-chromedriver==3.5.5
